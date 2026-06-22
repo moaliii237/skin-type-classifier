@@ -1,94 +1,188 @@
-[![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/nXy_JSNi)
-[![Open in Visual Studio Code](https://classroom.github.com/assets/open-in-vscode-2e0aaae1b6195c2367325f4f02e2d04e9abb55f0b24a779b69b11b9e10269abc.svg)](https://classroom.github.com/online_ide?assignment_repo_id=18122255&assignment_repo_type=AssignmentRepo)
+# Skin type image classifier
 
-# My project: skin type image classifier
+This is my Year 1 Block C project for the ADS&AI program at BUAS. I built an image
+classifier that looks at a photo and sorts the skin into four classes: dry, normal,
+oily, and skin disease. The idea behind it is a skincare app that could tell you your
+skin type from a single photo. The hard part is that the three healthy skin types look
+very similar to each other, so this is not an easy 4-class problem, and my numbers show
+that.
 
-This is my Block C project (Year 1, ADS&AI). I built an image classifier that
-sorts a face photo into skin types (normal, dry, oily) plus a separate class for
-diseased skin. The idea is a skincare app that tells you your skin type from a photo.
+I did this project on my own, so the dataset, the modelling, and the write-ups here are
+all mine. The only outside input is a peer review note in the Responsible AI part, which
+came from my reviewer (Barsam, 244141).
 
-## What I did
+## What is in here
 
-- Built my own image dataset. About 80% are real images (web scraping and an image
-  downloader) and under 20% are AI generated, plus one Kaggle class for skin disease.
-- Cleaned the data: converted everything to JPG, removed blurry images, checked the
-  images are RGB, and counted images per class to keep it balanced.
-- Trained four iterations: a basic MLP baseline, a CNN from scratch, the same CNN with
-  data augmentation, and transfer learning with VGG16 and VGG19.
-- Did error analysis on the misclassified images and a Responsible AI part on bias and
-  fairness (Fairness Through Awareness), plus an A/B test of the app (W8 t-test notebook).
+- A custom image dataset that I collected and cleaned myself (not committed, see below).
+- A deep learning notebook with four model iterations, from a simple baseline up to
+  transfer learning, plus error analysis.
+- A Responsible AI notebook where I look at bias in my own dataset and pick a fairness
+  method.
+- An A/B usability test of the app idea (the survey results and analysis are in the
+  `A&B Test` folder).
 
-My role: this was an individual project, so the modelling, dataset and write-ups here
-are mine. The peer review note in the Responsible AI notebook also includes feedback
-from my reviewer (Barsam).
+## How I built the dataset
 
-## Result
+I had to make my own dataset, there was no ready one for this. I ended up with four
+classes and a mix of sources:
 
-Best model was the VGG19 transfer learning one. Test accuracy was about 65% and the
-best validation accuracy was around 68%. The model is very good at the skin disease
-class but mixes up dry, normal and oily skin, since they look similar. Human level
-performance I measured was 87%, so there is still a gap to close.
+- About 80% real images. Most came from an image downloader tool, some from web
+  scraping (slower, and I had to filter the results by hand). I also pulled in a Kaggle
+  set for the skin disease class so I had more variety there.
+- Under 20% AI generated images, made with ComfyUI through its API. I wrote 30 prompts
+  per class. I kept these limited on purpose, because I did not want the model learning
+  only from fake skin that misses the small natural details.
+
+After collecting everything I cleaned it in the notebook (`Deep-Learning-Template
+Mohammadali Finall (Ready to submit).ipynb`). The steps, all with OpenCV, were:
+
+1. Convert every image to JPG with `cv2`, so the whole set is one consistent format.
+2. Remove blurry images. I used the Laplacian variance trick: run a Laplacian filter on
+   the grayscale image, take the variance, and if it is below a threshold of 100 the
+   image is too blurry, so I dropped it. Blurry images just confuse the model.
+3. Check every image is real RGB (3 channels), because mixed channels cause problems.
+4. Remove exact duplicates by hashing each file with MD5 and deleting any hash I had
+   already seen. This matters because the downloader and scraper grab the same image
+   more than once.
+5. Count images per class to check the classes were not badly unbalanced.
+
+Then I split the data 70/20/10 into train, validation, and test with scikit-learn
+`train_test_split` and a fixed `random_state=42` so the split is reproducible. Note the
+split script moves the files, so it is meant to run only once.
+
+## My modelling approach
+
+I worked through four iterations on purpose, so I could see what actually helped instead
+of jumping straight to a big model.
+
+**Baselines first.** Random guessing on four classes is 25%. I also measured human level
+performance by giving 5 people a 40 question quiz (10 per class). They got 26 wrong in
+total, which works out to about 87%. So 25% is the floor and 87% is the target.
+
+**Iteration 0, MLP baseline.** A plain fully connected network with the Keras Sequential
+API: Flatten on the 256x256 RGB image, then dense layers of 256, 128, and 64 units with
+ReLU, Batch Normalization, and Dropout (0.4 then 0.2). Output is 4 softmax neurons. Adam
+at learning rate 0.0003, categorical crossentropy, and EarlyStopping with patience 3.
+This is weak by design, an MLP throws away the spatial structure of the image, but it
+gives a starting point.
+
+**Iteration 1, CNN from scratch.** Several convolutional blocks, each one Conv2D plus
+Batch Normalization plus MaxPooling, with filters growing from 32 up to 512, then Dropout
+0.5 and dense layers into a 4-way softmax. Batch size 16 (smaller batch, more frequent
+weight updates, more stable for me), EarlyStopping with patience 5 and
+`restore_best_weights`. This got about 59% test accuracy (58.57% to be exact). The
+confusion matrix already showed the main story: it nails skin disease and confuses the
+three healthy types.
+
+**Iteration 2, CNN with augmentation.** To get more variety I augmented the training set
+with `ImageDataGenerator`: rotation 20 degrees, width/height shift 0.1, zoom 0.2,
+brightness 0.8 to 1.2, and horizontal flip. I made 3 augmented copies per image and saved
+them to a new `aug_train` folder, which grew the training set to 4,151 images (validation
+stayed at 415 and test at 210, both only rescaled, never augmented). This CNN had around
+13 million parameters. Honestly the augmentation did not help my numbers here, test
+accuracy was 56.19% and validation 58.07%, slightly below the plain CNN, which taught me
+that augmentation is not a free win when the classes overlap this much.
+
+**Iteration 3, transfer learning with VGG16.** Resized to 224x224 for the pretrained
+input. I used VGG16 (ImageNet weights) as a frozen feature extractor, then fine tuned only
+the last 6 layers, with my own dense head (512, 256, 128) plus Batch Normalization and
+Dropout. Adam at a very low learning rate (0.00003) so the pretrained features do not get
+wrecked, class weights to fight the imbalance, and two callbacks, EarlyStopping and
+ReduceLROnPlateau. This was my best model: 64.76% test accuracy (loss 0.766) and best
+validation 68.67%. Skin disease had recall 0.98 and precision 0.96. The macro and weighted
+F1 were both around 0.64.
+
+**Iteration 4, VGG19.** Same idea with VGG19 as the base, `include_top=False`, dense head
+of 512, 256, 128 with heavier dropout (0.6, 0.5, 0.5), Adam at 0.00005, plus EarlyStopping
+and ReduceLROnPlateau. Best validation accuracy 67.95% at epoch 29. Macro and weighted F1
+both 0.66. Skin disease again came out strongest (precision 0.90, recall 0.97), and dry,
+normal, and oily skin sat lower with F1 between 0.52 and 0.60.
+
+**Error analysis.** I pulled out the misclassified images and grouped them. Most mistakes
+fall into a few buckets: the three healthy skin types look alike (especially normal vs
+dry), some images were probably mislabeled, and some were blurry or low contrast so the
+skin texture was not clear. My proposed fixes were to recheck the labels, collect more
+clean images for the confusing classes, and add contrast enhancement.
+
+## Responsible AI
+
+In `Responsible-AI-Template.ipynb` I look at bias in my own dataset before trusting the
+model. The biases I flagged: the AI generated portion can miss real skin detail, there is
+likely demographic and skin tone imbalance, the web scraped images vary a lot in lighting
+and quality, and mislabeling is dangerous in anything skin or medical related. I chose
+skin tone as the sensitive attribute and picked Fairness Through Awareness as the fairness
+method, the idea being to acknowledge the skin tone differences and train fairly across
+groups rather than pretend all images are equal. This notebook also holds the infographic
+peer review from my reviewer.
+
+## A/B usability test
+
+For the Human-Centered AI side I ran an A/B test on two versions of the app design and
+collected Likert scale survey answers. I used SciPy for the statistics: a Shapiro-Wilk
+test to check whether the responses were normally distributed, Levene's test for equal
+variance, and a t-test to compare the two versions. The survey material and the analysis
+are in the `A&B Test` folder (versions A and B).
+
+## Results, stated honestly
+
+| Model | Test accuracy |
+| --- | --- |
+| Random guess (4 classes) | 25% |
+| MLP baseline | low, baseline only |
+| CNN from scratch | ~59% (58.57%) |
+| CNN + augmentation | 56.19% |
+| VGG16 transfer learning | 64.76% (best) |
+| VGG19 transfer learning | best val 67.95% |
+| Human level performance | ~87% |
+
+My best model lands around 65% on the test set. That is clearly better than the 25%
+random baseline, but it is well below the 87% humans got, so the project is not
+production ready. The reason is not really the architecture, it is the problem and the
+data: dry, normal, and oily skin look very close to each other even to a person, the
+dataset is not huge, and part of it is AI generated or possibly mislabeled. The one thing
+every model agreed on was that skin disease is easy to separate from healthy skin. If I
+came back to this, I would spend the time on the dataset (better labels, more real images,
+better balance) before touching the model again.
+
+## Tech stack
+
+- Python 3.9
+- TensorFlow / Keras 2.11 for the models
+- OpenCV (`opencv-python` 4.11) for the image cleaning (format conversion, blur filter,
+  RGB check)
+- scikit-learn 1.6.1 for the train/val/test split and the classification reports
+- scikit-image 0.24 for image utilities
+- SciPy 1.13.1 for the A/B test statistics (Shapiro-Wilk, Levene, t-test)
+- NumPy, Matplotlib, Pillow
+- xplique was installed for explainable AI experiments
 
 ## How to run
 
-1. Copy `.env.example` to `.env` and set `DATA_DIR` to the folder with your dataset.
-   The dataset itself is not in the repo because it is too large (see `.gitignore`).
-2. Install the packages from `Deliverables/requirements.txt` (it is a conda export).
+The dataset and the trained model files (`.h5`, `.keras`) are not in this repo, they are
+too large and the data is kept off GitHub (see `.gitignore`). You bring your own dataset
+folder with one subfolder per class.
+
+1. Copy `.env.example` to `.env` and set `DATA_DIR` to the folder that holds your dataset.
+   If you want to regenerate the AI images, also set the `COMFYUI_*` values.
+2. Create the environment from the conda export:
+   ```
+   conda create --name skin --file "Deliverables/requirements.txt"
+   conda activate skin
+   ```
 3. Open `Deep-Learning-Template Mohammadali Finall (Ready to submit).ipynb` and run the
-   cells in order. The notebook already has the saved outputs from my run.
+   cells in order. The notebook keeps the saved outputs from my run, so you can read the
+   results without retraining. Do not re-run the dataset split cell, it moves files and is
+   meant to run only once.
 
----
+A GPU helps a lot for the CNN and VGG iterations. On CPU the transfer learning models are
+slow to train.
 
-# Block C - Data Modelling
+## Key files
 
-In block A, you explored the foundations of artificial intelligence and data science by developing an interactive data visualization dashboard. In block B, you expanded your skills by analyzing a healthcare dataset and applying various preprocessing and machine learning methods to extract insights.
-
-This block will focus on the __*Modeling*__ phase of the __*CRISP-DM*__ lifecycle. You will learn how to conduct market/consumer research and how to build transparent, interpretable, and fair deep-learning models for image classification. In addition, you will learn how to integrate these concepts for the development of user-centered applications.
-
-## Creative Brief
-
-The [Innovation Square](https://www.buas.nl/en/collaboration/innovation-square) is your client in this block. The Innovation Square is a dynamic hub at Breda University of Applied Sciences that integrates education, research, and industry. It's a place where collaboration and innovation connect education and practice-oriented research to activities in the relevant industries. They approached you - as an aspiring __Data Scientist__ - to apply your expertise in providing innovative data-driven solutions. In particular, they require your assistance in proposing and developing a creative and innovative application utilizing deep learning for image classification. The challenge is to identify a problem where image classification can provide significant business value and/or societal impact in any area or industry.
-
-Therefore, the main objective of this project is to develop an image classification application using deep learning and your own image dataset. To this end, you will need to create a project proposal that touches upon the following topics:
-- Market/consumer research and risk assessment;
-- The design and evaluation of a transparent, interpretable (and fair) deep learning-based image classifier;
-- The development of a user-centered prototype application for your image classifier.
-
-The top 3 projects with the best business value will have the unique opportunity to present their results directly to the Innovation Square and a specially invited group of entrepreneurs from [BUas Startup Support](https://www.buas.nl/en/study/entrepreneurship) (like in the TV shows [Shark Tank](https://en.wikipedia.org/wiki/Shark_Tank) and [Dragons' Den](https://en.wikipedia.org/wiki/Dragons%27_Den_(British_TV_programme))), which can provide valuable insights and even support for further development of the projects, potentially transforming your academic projects into viable and standalone business ventures. This is more than just a project; it's a potential launchpad for your entrepreneurial journey! 
-
-## Knowledge Modules
-
-The ADS&AI program is structured into 8-week blocks. On Monday, Wednesday, and Thursday you work individually on the development of fundamental skills, which are needed to successfully complete the Creative brief. In *__DataLab__* (Mandatory! See [DataLab Attendance](https://adsai.buas.nl/General/DataLabAttendance.html), for more information), scheduled on Tuesdays and Fridays, you apply your knowledge to the Creative Brief by completing a list of tasks, which you can find in the [DataLab Tasks](https://adsai.buas.nl/Year1/BlockC/DataLabTasks.html).
-
-The project of this block aims to develop an image classification application prototype. The block is centered around four *__knowledge modules__*:
-
-- [Business Understanding](https://adsai.buas.nl/Study%20Content/Business%20Understanding/)
-- [Responsible AI](https://adsai.buas.nl/Study%20Content/Responsible%20AI/)
-- [Deep Learning](https://adsai.buas.nl/Study%20Content/Deep%20Learning/)
-- [Human-Centered AI](https://adsai.buas.nl/Study%20Content/Human-Centered%20Artificial%20Intelligence/)
-
-### 1. Business Understanding
-
-For Business Understanding, you will conduct market research to identify a consumer related problem in a industry or company. Based on the stakeholder analysis and DAPS diagram, you will then create your first idea for an application aimed at solving a potential problem within that industry or company.
-
-### 2. Responsible AI
-
-For Responsible AI, you will perform an exploratory data analysis to uncover hidden biases in your custom image dataset or in the Imsitu dataset. In addition, after you have built and trained your image classification model, you will learn how to make it more transparent and interpretable by applying various explainable AI methods.
-
-### 3. Deep Learning
-
-For Deep Learning, you will explore various artificial neural network architectures and develop the skills to design and implement your own image classifier. Your model will demonstrate the feasibility of applying deep learning techniques to solve an image classification problem.
-
-### 4. Human-Centered AI
-
-For Human-Centered AI, you will design an application (wireframe prototype) based on your idea and DAPS diagram that incorporates your image classifier model. While designing the application, you also will conduct user tests (think-aloud study and A/B testing).
-
-## Medal Challenges 
-
-You are encouraged to get the best out of yourself. Therefore, within the ADS&AI program, we regularly allow you to push yourself further by giving you so-called bronze-silver-gold challenges. By achieving these, you can earn badges for your GitHub page, which mark excellent students: 
-
-![badge](https://custom-icon-badges.herokuapp.com/badge/ADS&AI-1x-orange.svg?logo=bronzemedal) Build an **interactive explainable AI dashboard** that visualizes and interprets the predictions of your image classification model using techniques like Grad-CAM, LIME, or SHAP. The dashboard should allow users to upload new images, display the predictions, and show visual explanations highlighting the parts of the image that influenced the model's decision.
-
-![badge](https://custom-icon-badges.herokuapp.com/badge/ADS&AI-1x-orange.svg?logo=silvermedal) Implement a **fully functional application** for the project, which includes the process of **deploying the image classification model on a server** and building a **functional client interface** to use the model.
-
-![badge](https://custom-icon-badges.herokuapp.com/badge/ADS&AI-1x-orange.svg?logo=goldmedal) Get selected as one of the **top 3 projects** that will present their results to the Innovation Square and BUas Startup Support team. The selection of the best projects will be mainly based on business value, but keep in mind that other factors, such as model accuracy, interpretability, and interface design, also contribute to the viability of the project.
+```
+Deep-Learning-Template Mohammadali Finall (Ready to submit).ipynb   main notebook: data cleaning + 4 model iterations + error analysis
+Responsible-AI-Template.ipynb                                       bias analysis and fairness method
+A&B Test/                                                           A/B usability test (versions A and B, survey + analysis)
+Deliverables/requirements.txt                                       conda environment export
+.env.example                                                        config template (DATA_DIR, ComfyUI server)
+```
