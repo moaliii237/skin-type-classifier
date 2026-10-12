@@ -121,7 +121,8 @@ For the Human-Centered AI side I ran an A/B test on two versions of the app desi
 collected Likert scale survey answers. I used SciPy for the statistics: a Shapiro-Wilk
 test to check whether the responses were normally distributed, Levene's test for equal
 variance, and a t-test to compare the two versions. The survey material and the analysis
-are in the `ab_test` folder (versions A and B).
+are in the `ab_test` folder (versions A and B). The response files are
+anonymised: names and email addresses were removed before publishing.
 
 ## Results, stated honestly
 
