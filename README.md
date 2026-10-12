@@ -19,7 +19,7 @@ came from my reviewer (Barsam, 244141).
 - A Responsible AI notebook where I look at bias in my own dataset and pick a fairness
   method.
 - An A/B usability test of the app idea (the survey results and analysis are in the
-  `A&B Test` folder).
+  `ab_test` folder).
 
 ## How I built the dataset
 
@@ -106,7 +106,7 @@ clean images for the confusing classes, and add contrast enhancement.
 
 ## Responsible AI
 
-In `Responsible-AI-Template.ipynb` I look at bias in my own dataset before trusting the
+In `responsible_ai_bias_analysis.ipynb` I look at bias in my own dataset before trusting the
 model. The biases I flagged: the AI generated portion can miss real skin detail, there is
 likely demographic and skin tone imbalance, the web scraped images vary a lot in lighting
 and quality, and mislabeling is dangerous in anything skin or medical related. I chose
@@ -121,7 +121,7 @@ For the Human-Centered AI side I ran an A/B test on two versions of the app desi
 collected Likert scale survey answers. I used SciPy for the statistics: a Shapiro-Wilk
 test to check whether the responses were normally distributed, Levene's test for equal
 variance, and a t-test to compare the two versions. The survey material and the analysis
-are in the `A&B Test` folder (versions A and B).
+are in the `ab_test` folder (versions A and B).
 
 ## Results, stated honestly
 
@@ -169,7 +169,7 @@ folder with one subfolder per class.
    conda create --name skin --file "Deliverables/requirements.txt"
    conda activate skin
    ```
-3. Open `Deep-Learning-Template Mohammadali Finall (Ready to submit).ipynb` and run the
+3. Open `skin_type_classifier.ipynb` and run the
    cells in order. The notebook keeps the saved outputs from my run, so you can read the
    results without retraining. Do not re-run the dataset split cell, it moves files and is
    meant to run only once.
@@ -180,9 +180,9 @@ slow to train.
 ## Key files
 
 ```
-Deep-Learning-Template Mohammadali Finall (Ready to submit).ipynb   main notebook: data cleaning + 4 model iterations + error analysis
-Responsible-AI-Template.ipynb                                       bias analysis and fairness method
-A&B Test/                                                           A/B usability test (versions A and B, survey + analysis)
+skin_type_classifier.ipynb   main notebook: data cleaning + 4 model iterations + error analysis
+responsible_ai_bias_analysis.ipynb                                       bias analysis and fairness method
+ab_test/                                                            A/B usability test (versions A and B, survey + analysis)
 Deliverables/requirements.txt                                       conda environment export
 .env.example                                                        config template (DATA_DIR, ComfyUI server)
 ```
